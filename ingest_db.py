@@ -79,6 +79,16 @@ def _leer_credencial(nombre: str) -> str | None:
     valor = os.getenv(nombre)
     if valor:
         return valor.strip()
+    # Streamlit Community Cloud expone los secrets en `st.secrets`.
+    try:
+        import streamlit as st
+
+        if nombre in st.secrets:
+            secreto = st.secrets[nombre]
+            if isinstance(secreto, str) and secreto.strip():
+                return secreto.strip()
+    except Exception:  # noqa: BLE001
+        pass
     if _RUTA_SECRETS.exists():
         try:
             import tomllib

@@ -129,7 +129,7 @@ def _fig_stringline(df_f: pd.DataFrame) -> None:
 def render_panel() -> None:
     # La ingesta corre en el worker en background; aquí solo se leen los marts.
     est = worker.estado() if WORKER_DISPONIBLE else {}
-    df = db.leer_efecto_domino(solo_conocidos=True)
+    df = db.leer_efecto_domino(solo_conocidos=False)
     meta = db.leer_meta()
 
     if WORKER_DISPONIBLE and not est.get("ultimo_ciclo") and df.empty:
@@ -145,6 +145,13 @@ def render_panel() -> None:
 
     if df.empty:
         st.info("Keine Daten verfügbar. Bitte die automatische Aktualisierung des Live-Feeds abwarten.")
+        if est:
+            st.caption(
+                f"Worker: aktiv={est.get('activo')} · letzter Zyklus={est.get('ultimo_ciclo')} · "
+                f"Letzter Fehler: {est.get('ultimo_error') or '—'}"
+            )
+            if est.get("resumen"):
+                st.caption(f"Letzte Ingesta: {est['resumen']}")
         return
 
     # Identificación legible de los trenes (línea y ruta origen -> destino).
