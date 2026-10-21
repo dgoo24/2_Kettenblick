@@ -1,0 +1,7 @@
+streamlit>=1.57
+duckdb>=0.9
+pandas>=2.0
+plotly>=5.0
+requests>=2.28
+gtfs-realtime-bindings>=1.0
+tzdata>=2023.3

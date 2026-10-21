@@ -1,0 +1,11 @@
+# Credenciales locales (API de DB, etc.)
+.streamlit/secrets.toml
+
+# Datos / artefactos
+*.duckdb
+*.duckdb.wal
+gtfs_germany.zip
+__pycache__/
+*.pyc
+.venv/
+venv/
