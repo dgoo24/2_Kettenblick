@@ -172,6 +172,15 @@ def _db() -> duckdb.DuckDBPyConnection:
         with _DB_CON_LOCK:
             if _DB_CON is None:
                 _DB_CON = duckdb.connect(str(RUTA_DB))
+                # Workaround de un bug interno de DuckDB (visto en Python 3.14):
+                # TopNWindowElimination puede fallar con "Failed to cast
+                # expression to type" al materializar vistas con ROW_NUMBER().
+                try:
+                    _DB_CON.execute(
+                        "SET disabled_optimizers='top_n_window_elimination'"
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
     return _DB_CON
 
 

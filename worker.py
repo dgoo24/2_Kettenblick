@@ -52,7 +52,7 @@ except Exception:  # noqa: BLE001
 
 INTERVALO_INGESTA_S = 60        # cada cuánto se refresca el feed en vivo
 INTERVALO_ENRIQUECER_S = 60     # cada cuánto se re-resuelve el Zugnummer
-MAX_TRIPS = None                # None = ingerir TODOS los trenes activos del feed
+MAX_TRIPS = 1500               # tope del fallback GTFS-RT (evita saturar la nube)
 
 _hilos: list[threading.Thread] = []
 _parar = threading.Event()
