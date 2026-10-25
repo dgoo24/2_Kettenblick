@@ -1,4 +1,3 @@
-```markdown
 # 🚆 Erkennung kritischer Zugverspätungen (Dominoeffekt)
 
 Analytisches und funktionsfähiges MVP, das nahezu in Echtzeit erkennt, wie sich die Verspätung eines
