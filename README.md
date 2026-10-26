@@ -1,246 +1,410 @@
-# 🚆 Erkennung kritischer Zugverspätungen (Dominoeffekt)
+<div align="center">
 
-Analytisches und funktionsfähiges MVP, das nahezu in Echtzeit erkennt, wie sich die Verspätung eines
-Zuges **von Bahnhof zu Bahnhof aufsummiert** (Dominoeffekt), inspiriert vom
-deutschen Eisenbahnbetrieb (Deutsche Bahn).
+# 🚆 Kettenblick
 
-Es kombiniert **DuckDB** als analytisches DWH, **SQL mit Fensterfunktionen** (dimensionale
-Modellierung im Kimball-Stil) und **Streamlit + Plotly** für das Dashboard.
+### Wenn eine Minute Verspätung zur Kettenreaktion wird.
 
-## 🧩 Architektur
+**Ein Live-Dashboard für den deutschen Schienenverkehr – vom ersten Signal bis zur letzten Anschlussverbindung.**
 
-| Ebene | Technologie |
-|------|------------|
-| Sprache | Python 3.10+ |
-| Datenbank / DWH | DuckDB (`trenes_mvp.duckdb`) |
-| Analytische Verarbeitung | SQL mit Fensterfunktionen (Views) |
-| Dashboard / UI | Streamlit + Plotly |
-| Aufnahme realer Daten | GTFS / GTFS-Realtime von DELFI (`gtfs.de`), öffentlich und ohne API-Key |
-| Echte Zugnummer (optional) | **Timetables**-API der Deutschen Bahn (DB API Marketplace, kostenloser Schlüssel) |
+[![Live Demo](https://img.shields.io/badge/▶%20Live%20Demo-2kettenblick.streamlit.app-EC0016?style=for-the-badge&logo=streamlit&logoColor=white)](https://2kettenblick-attpjk4i6aodt37l6bnq5d.streamlit.app/)
 
-## 📁 Dateistruktur
+![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.57+-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)
+![DuckDB](https://img.shields.io/badge/DuckDB-OLAP-FFF000?style=flat-square&logo=duckdb&logoColor=black)
+![Plotly](https://img.shields.io/badge/Plotly-Interaktiv-3F4F75?style=flat-square&logo=plotly&logoColor=white)
+![Made in Germany](https://img.shields.io/badge/Made%20in-Germany-000000?style=flat-square&logo=deutschebahn&logoColor=white)
+
+</div>
+
+---
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│  ABFAHRT   ZUG       ZIEL                  STATUS            │
+├──────────────────────────────────────────────────────────────┤
+│  10:17     ICE 573   Hamburg Hbf           +12 Min  🟡       │
+│  10:19     RE 4      Fulda                 + 3 Min  🟢       │
+│  10:24     IC 2045   Kassel-Wilhelmshöhe   +27 Min  🔴       │
+│  10:31     S 3       Frankfurt (M) Hbf     + 8 Min  🟡       │
+└──────────────────────────────────────────────────────────────┘
+```
+
+> **„Der ICE hat doch nur acht Minuten."**
+> Acht Minuten in Fulda. Zwanzig in Kassel. Vierzig in Hannover.
+> Genau diese Kette macht **Kettenblick** sichtbar.
+
+---
+
+## 🎯 Worum geht es?
+
+Verspätungen bleiben selten dort, wo sie entstehen. Ein verspäteter Zug blockiert
+einen engen Anschluss, ein Anschluss verzögert den nächsten Zug, und aus einer
+kleinen Störung wird eine **Kettenreaktion über hunderte Kilometer**.
+
+Klassische Anzeigen sagen: *„Zug X hat 8 Minuten Verspätung."*
+Kettenblick beantwortet stattdessen:
+
+- **Wo entsteht die Verspätung?**
+- **Welche Minuten werden stromabwärts weitergegeben?**
+- **Welcher Bahnhof ist der eigentliche Flaschenhals?**
+- **Welche Anschlüsse platzen – und was kostet Warten?**
+- **Welcher Zug muss priorisiert werden, um die Kaskade zu stoppen?**
+
+Dazu verbindet das Projekt **Fahrplandaten** mit **Live-Änderungen** der
+Deutschen Bahn, modelliert den Verlauf in **DuckDB** und visualisiert ihn in
+**Streamlit + Plotly** – im Look eines deutschen Abfahrtsmonitors.
+
+---
+
+## ✨ Funktionen
+
+| | Funktion | Beschreibung |
+|---|---|---|
+| 📊 | **Live-KPIs** | Überwachte Züge, aktive kritische Warnungen, maximale kumulierte Verspätung, Hauptengstelle |
+| 🗺️ | **Bildfahrplan** | Zeit-Weg-Diagramm: jeder Zug eine Linie, gestrichelt = Plan, durchgezogen = Realität |
+| ⏱️ | **Flaschenhals-Ranking** | Ausbreitungsfaktor pro Bahnhof: erzeugte Minuten stromabwärts je verlorener Minute |
+| 📈 | **Verspätungskaskade** | Kumulierte Verspätung je Bahnhof und Zug – sortiert nach Priorität |
+| 🔗 | **Anschlussrisiko** | Gefährdete und verpasste Anschlüsse inklusive Handlungsempfehlung |
+| 🧾 | **Verspätungsursachen** | Aktive Netzstörungen aus dem Live-Feed plus Ursache je Zug |
+| 🎛️ | **Geo-Filter** | Bundesland → Stadt, wirkt auf KPIs, Diagramme und Tabellen |
+| 🔄 | **Auto-Refresh** | UI aktualisiert sich alle 5 Sekunden, ohne Voll-Rerun (`st.fragment`) |
+| ⚙️ | **Entkoppelte Ingestion** | Hintergrund-Worker schreibt alle 60 Sekunden, die UI liest nur fertige Marts |
+| ☁️ | **Cloud-ready** | Läuft auf Streamlit Community Cloud, inklusive Secrets und Fallback-Feed |
+
+### Statuslogik
+
+| Status | Bedeutung |
+|---|---|
+| 🔴 **KRITISCH** | kumulierte Verspätung **≥ 15 Minuten** |
+| 🟡 **WARNUNG** | kumulierte Verspätung **> 5 Minuten** |
+| 🟢 **PÜNKTLICH** | bis einschließlich 5 Minuten |
+
+---
+
+## 🧠 Die Idee in einem Satz
+
+> **Nicht der Zug ist das Problem – die Kette ist es.**
+
+Kettenblick betrachtet jeden Zug als eine **Folge von Halten**. Die Verspätung
+eines Halts wird zur Eingangsverspätung des nächsten Halts. So entsteht eine
+Kaskade, die sich mathematisch mit **Fensterfunktionen** sauber abbilden lässt:
+
+```sql
+SUM(retraso_estacion) OVER (
+    PARTITION BY id_tren
+    ORDER BY secuencia, id_estacion
+    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+) AS retraso_acumulado_domino
+```
+
+Daraus entstehen drei zentrale Kennzahlen:
+
+| Kennzahl | Formel / Bedeutung |
+|---|---|
+| `retraso_estacion` | Verspätungszuwachs gegenüber dem vorherigen Halt |
+| `retraso_acumulado_domino` | Summe aller Zuwächse bis zu diesem Halt |
+| `indice_propagacion` | stromabwärts erzeugte Minuten ÷ hier verlorene Minuten |
+
+Ein Bahnhof mit **Faktor 2,7** bedeutet: *Eine hier verlorene Minute erzeugt
+stromabwärts 2,7 Minuten Verspätung.* Genau solche Knotenpunkte lohnen sich
+zuerst zu entlasten.
+
+---
+
+## 🏗️ Architektur
+
+```mermaid
+flowchart LR
+    subgraph Q["Datenquellen"]
+        DB["DB Timetables API<br/>plan + fchg"]
+        RT["DELFI GTFS-RT<br/>Echtzeit-Fallback"]
+        ST["GTFS Static<br/>Haltestellen & Linien"]
+    end
+
+    subgraph B["Backend"]
+        W["Worker<br/>2 Daemon-Threads"]
+        M["Materialisierte Marts"]
+    end
+
+    DWH[("DuckDB<br/>Fakt + Dimensionen")]
+    SQL["SQL-Views<br/>Window Functions"]
+    UI["Streamlit + Plotly<br/>Dashboard"]
+
+    DB --> W
+    RT --> W
+    ST -. optional .-> W
+    W --> DWH
+    DWH --> SQL
+    SQL --> M
+    M --> UI
+```
+
+### Warum ein Worker?
+
+Die Ingestion ist langsam: Netzwerk, XML-Parsing, hunderte Züge. Die UI darf
+darauf nicht warten. Deshalb laufen **zwei Daemon-Threads** getrennt vom
+Streamlit-Rerun:
+
+- **`_bucle_ingesta`** – holt alle 60 Sekunden Fahrplan + Live-Änderungen und
+  ersetzt die Faktentabelle atomar.
+- **`_bucle_zugnummer`** – löst optional echte Zugnummern über die DB-API auf.
+- **`materializar_marts()`** – schreibt kleine, fertige Tabellen für die UI.
+- Schreibzugriffe werden über einen **Lock** serialisiert.
+
+Ergebnis: Der 5-Sekunden-Refresh der Oberfläche kostet nur Millisekunden.
+
+---
+
+## 🔌 Datenquellen
+
+| Quelle | Endpoint | Inhalt | Rolle |
+|---|---|---|---|
+| **DB Timetables API** | `plan/{eva}/{datum}/{stunde}` | Fahrplan je Bahnhof und Stunde, inkl. Zugnummer und Laufweg | **Primär** |
+| **DB Timetables API** | `fchg/{eva}` | Live-Änderungen (IRIS): reale Ankunft/Abfahrt, Ursachen, Meldungen | **Primär** |
+| **DELFI GTFS-Realtime** | `realtime.gtfs.de/realtime-free.pb` | Trip-Updates und Service-Alerts | **Fallback** |
+| **GTFS Static (DELFI)** | `download.gtfs.de/germany/free/latest.zip` | Haltestellen, Linien, Fahrten (~290 MB) | Optional für Fallback |
+| **DB Station Lookup** | `station/{name}` | Auflösung Haltestelle → EVA | Optional für Fallback |
+
+### Warum zwei Quellen?
+
+Der kostenlose DELFI-Feed liefert **echte Live-Verspätungen**, aber überwiegend
+Regional-, S-Bahn- und Busverkehr. Die **DB Timetables API** liefert dagegen die
+echten **Fernverkehrszüge mit Zugnummer** (z. B. `ICE 573`) und deren Laufweg.
+
+Kettenblick nutzt daher:
+
+1. **DB-API**, wenn Zugangsdaten vorhanden sind → echte, identifizierbare Züge.
+2. **GTFS-RT**, wenn keine Zugangsdaten oder die API nicht erreichbar ist →
+   trotzdem ein funktionierendes Live-Dashboard (max. 1.500 Fahrten pro Zyklus).
+
+Die beiden Welten werden **nicht vermischt**: GTFS-`trip_id`s und DB-`<s id>`s
+sind unterschiedliche Schlüssel. Jede Quelle hat ihren eigenen Pfad.
+
+---
+
+## 🗃️ Datenmodell
+
+**Faktentabelle `registro_trenes`** – eine Zeile = ein Zug an einem Halt:
+
+| Spalte | Bedeutung |
+|---|---|
+| `id_tren` | Zugschlüssel (API-Zugnummer oder GTFS-`trip_id`) |
+| `id_estacion` / `nombre_estacion` | Haltestelle (EVA bzw. GTFS-`stop_id`) + Name |
+| `ciudad` / `region` | Stadt und Bundesland |
+| `hora_programada` / `hora_real` | Plan- und Ist-Zeit |
+| `secuencia` | Position im Laufweg |
+| `tipo_tren` | ICE, IC, EC, RE, RB, S, Güterzug … |
+| `prioridad` | Priorität (1 = höchste) |
+| `motivo_retraso` | Kategorisierte Ursache |
+| `retraso_incremental` | Zuwachs gegenüber dem vorherigen Halt (Minuten) |
+| `fuente` | Herkunft: DB-API, GTFS-RT oder historisch |
+
+**Dimensionen:** `dim_estacion`, `dim_tren`, `dim_tren_zug`,
+`dim_estacion_eva`, `dim_plan_parada`, `alerta_red`, `meta_ingesta`.
+
+**Analytische Views:**
+
+| View / Mart | Zweck |
+|---|---|
+| `v_efecto_domino` | Verspätung je Halt, kumuliert und mit Status |
+| `v_anschluss_riesgo` | Anschlussmarge, verpasste Anschlüsse, Handlungsempfehlung |
+| `v_resumen_tren` | Endzustand je Zug |
+| `mart_tren_etiqueta` | Anzeigename, Linie, Zugnummer, Laufweg |
+| `mart_flaschenhals` | Engstellen je Bahnhof, Stadt und Region |
+| `mart_anschluss` | Vorberechnetes Anschlussrisiko |
+| `mart_causas_red` | Aggregierte Störungen im Netz |
+
+---
+
+## 📁 Projektstruktur
 
 ```text
 .
+├── app.py              # Streamlit-Dashboard, Filter, Diagramme, Tabellen
+├── database.py         # DuckDB-Schema, Views, Marts, What-If-Szenarien
+├── ingest.py           # DELFI GTFS-RT + GTFS Static (Fallback)
+├── ingest_api.py       # DB Timetables API: plan + fchg → echte Züge
+├── ingest_db.py        # DB-API-Client, EVA-Auflösung, Zugnummern
+├── worker.py           # Hintergrund-Ingestion, Marts, Status
 ├── requirements.txt    # Abhängigkeiten
-├── database.py         # DWH DuckDB: Schema, analytische Views, What-if-Szenarien
-├── ingest.py           # Aufnahme öffentlicher Daten (GTFS-RT, statisches GTFS, historische CSV-Daten)
-├── ingest_db.py        # Echte Zugnummer über die DB-Timetables-API (optional)
-├── worker.py           # Hintergrund-Datenaufnahme (Daemon-Threads) + materialisierte Marts
-├── app.py              # Streamlit- + Plotly-Dashboard
-├── README.md
-└── trenes_mvp.duckdb   # Wird automatisch erstellt
+├── runtime.txt         # Python-Version für Streamlit Cloud
+├── .streamlit/
+│   ├── config.toml     # Abfahrtsmonitor-Theme (schwarz/amber/DB-rot)
+│   └── secrets.toml    # Lokale Zugangsdaten (nicht versioniert)
+└── trenes_mvp.duckdb   # Wird automatisch erzeugt
 ```
 
-## ⚡ Leistung (Hintergrund-Datenaufnahme)
+---
 
-Die Datenaufnahme (Download des Feeds mit ca. 23 MB + Ermittlung der Zugnummer) ist langsam. Damit
-die UI nicht blockiert wird, läuft sie in **Daemon-Threads** (`worker.py`), während die UI nur
-**materialisierte Tabellen** (Marts) liest, die nach jeder Datenaufnahme neu berechnet werden:
+## 🚀 Schnellstart
 
-- `_bucle_ingesta` aktualisiert den Feed alle 60 s (`importar_gtfs_rt`).
-- `_bucle_zugnummer` ermittelt die Zugnummern alle 60 s erneut (DB-API).
-- `materializar_marts()` erstellt `mart_tren_etiqueta`, `mart_flaschenhals` und
-  `mart_anschluss` (kleine Tabellen), sodass ein Rerun alle 5 s nur etwa einige Dutzend Millisekunden benötigt.
-- Die Dimensionen werden per **JOIN in SQL** (`mapa_tipos_tren`/`mapa_estaciones`) aufgelöst,
-  anstatt 1,9 Mio. / 675.000 Zeilen nach Python zu laden.
-
-Das Muster folgt weiterhin **Kimball** (das Modell bleibt unverändert): Lediglich die *Datenaufnahme*
-(Worker) wird vom *Dienst* (UI) getrennt und es werden materialisierte Marts hinzugefügt.
-
-## ⚙️ Installation
+### 1. Repository klonen
 
 ```bash
-python -m venv .venv
-# Windows (PowerShell)
-.\.venv\Scripts\Activate.ps1
-# macOS / Linux
-source .venv/bin/activate
+git clone https://github.com/dgoo24/2_Kettenblick.git
+cd 2_Kettenblick
+```
 
+### 2. Virtuelle Umgebung anlegen
+
+**Windows (PowerShell)**
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+**macOS / Linux**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Abhängigkeiten installieren
+
+```bash
 pip install -r requirements.txt
 ```
 
-## ▶️ Ausführung
+### 4. Zugangsdaten hinterlegen (optional, aber empfohlen)
+
+Ohne Zugangsdaten startet das Dashboard im **GTFS-RT-Fallback**. Für echte
+Fernverkehrszüge mit Zugnummer:
+
+1. Registriere dich im
+   [DB API Marketplace](https://developers.deutschebahn.com/db-api-marketplace/).
+2. Erstelle eine Anwendung und abonniere das Produkt **Timetables**.
+3. Lege `.streamlit/secrets.toml` an:
+
+```toml
+DB_CLIENT_ID = "deine-client-id"
+DB_API_KEY   = "dein-api-key"
+```
+
+Alternativ funktionieren die Umgebungsvariablen `DB_CLIENT_ID` und `DB_API_KEY`.
+Die Datei steht in `.gitignore` und wird **nicht** versioniert.
+
+### 5. Starten
 
 ```bash
 streamlit run app.py
 ```
 
-Das Dashboard wird unter `http://localhost:8501` geöffnet (wenn der Port belegt ist, `--server.port 8502` verwenden).
+Das Dashboard öffnet sich unter `http://localhost:8501`.
+Bei belegtem Port: `streamlit run app.py --server.port 8502`.
 
-## 🧠 Datenmodell (DuckDB)
+---
 
-Faktentabelle `registro_trenes` (eine Zeile = Durchfahrt eines Zuges durch einen Bahnhof):
+## ⚙️ Konfiguration
 
-| Spalte | Beschreibung |
-|---------|-------------|
-| `id_tren` | Interne GTFS-`trip_id` (wird in `dim_tren`/`dim_tren_zug` einer Linie/Zugnummer zugeordnet) |
-| `id_estacion` / `nombre_estacion` | Bahnhof (EVA / GTFS-`stop_id` + Name) |
-| `ciudad` / `region` | Stadt und Bundesland des Bahnhofs |
-| `hora_programada` / `hora_real` | Geplante und tatsächliche Uhrzeit |
-| `secuencia` | Reihenfolge des Halts auf der Strecke |
-| `tipo_tren` | ICE / IC / EC / RE / RB / S / Güterzug |
-| `prioridad` | Durchfahrtspriorität (1 = höchste Priorität) |
-| `motivo_retraso` | Kategorisierte Hauptursache |
-| `retraso_incremental` | Gegenüber dem vorherigen Halt hinzugekommene Verspätung (Min.) |
-| `fuente` | Quelle: Synthetisch / GTFS-RT (DELFI) / Historisch (CSV) |
+| Einstellung | Ort | Standard | Bedeutung |
+|---|---|---|---|
+| `DB_CLIENT_ID` | Secrets / Env | – | Client-ID der DB Timetables API |
+| `DB_API_KEY` | Secrets / Env | – | API-Key der DB Timetables API |
+| `INTERVALO_INGESTA_S` | `worker.py` | `60` | Sekunden zwischen zwei Ingestion-Zyklen |
+| `MAX_TRIPS` | `worker.py` | `1500` | Obergrenze für den GTFS-RT-Fallback |
+| `horas_adelante` | `ingest_api.py` | `1` | Zusätzliche Fahrplanstunden pro Abfrage |
 
-### Hauptursachen (`motivo_retraso`)
+Die DB-API wird für **24 Fernverkehrsknoten** abgefragt – darunter Berlin Hbf,
+Hamburg Hbf, München Hbf, Köln Hbf, Frankfurt (M) Hbf, Stuttgart Hbf, Hannover
+Hbf, Leipzig Hbf, Dresden Hbf, Nürnberg Hbf und Kassel-Wilhelmshöhe.
 
-- `Baustelle / eingleisiger Betrieb` — Baustelle oder eingleisiger Betrieb.
-- `Störung Oberleitung / Signal` — Technische Störung.
-- `Warten auf Anschlusszug` — Warten auf einen Anschlusszug.
-- `Überfüllung / Überlastung` — Zu viele Fahrgäste.
-- `Witterung / Unwetter` — Wetter / Unwetter.
-- `Umleitung / Ersatzverkehr (SEV)` — Umleitung / Schienenersatzverkehr.
-- `Polizei / Personen im Gleis` — Polizei / Personen im Gleisbereich.
-- `Personalausfall` — Personalmangel.
-- `Betrieb & Ausstattung` — Informationshinweis (Barrierefreiheit/Fahrzeug), keine Verspätung.
-- `Sonstiges / unbekannt` — Sonstiges.
+---
 
-> **Hinweis zum frei verfügbaren Feed (DELFI):** Das kostenlose GTFS-RT enthält **keine**
-> strukturierte Ursache je Zug (`route_id` ist leer, `cause` ist fast immer `UNKNOWN`). Die
-> Ursache wird anhand von Schlüsselwörtern im Text jeder `ServiceAlert` klassifiziert
-> (`ingest.clasificar_alerta`); dieser beschreibt die Störung auf Deutsch. Diese
-> Meldungen gelten für das Netz bzw. eine Linie (und betreffen häufig geplante Bauarbeiten oder
-> Hinweise zur Barrierefreiheit). Daher gilt:
-> - Der Abschnitt **„Hauptursachen der Verspätung“** zeigt die tatsächliche Verteilung
->   **aktiver Netzstörungen** (Tabelle `alerta_red` / `mart_causas_red`).
-> - Die Spalte **`Hauptursache`** je Zug wird nur dann ausgefüllt, wenn eine Störungsmeldung
->   auf dessen `trip_id` verweist; andernfalls lautet der Wert `Keine Information im Feed`.
+## ☁️ Deployment auf Streamlit Community Cloud
 
-### Analytische Views (Fensterfunktionen)
+1. Repository mit Streamlit verbinden.
+2. Als Einstiegspunkt `app.py` wählen.
+3. Unter **App settings → Secrets** die Zugangsdaten eintragen:
 
-- **`v_efecto_domino`** — Verspätung je Bahnhof und kumulierte Verspätung:
-  - `retraso_estacion` = lokale Verspätung (inkrementell)
-  - `retraso_acumulado_domino` = `SUM(retraso_estacion) OVER (PARTITION BY id_tren ORDER BY secuencia)`
-  - `estado`: 🔴 KRITISCH `>= 15` · 🟡 WARNUNG `> 5` · 🟢 PÜNKTLICH
-- **`v_flaschenhals`** — Engpass je Bahnhof und **Ausbreitungsindex**
-  (Minuten, die sich entlang der Strecke für jede an diesem Bahnhof verlorene Minute ergeben).
-  Die Abfrage erfolgt über `db.leer_flaschenhals(agrupar)`, wobei `agrupar`
-  `nombre_estacion`, `ciudad` oder `region` sein kann, um die Analyse geografisch aufzuschlüsseln.
-- **`v_anschluss_riesgo`** — Verpasste oder gefährdete Anschlüsse und vorgeschlagene Maßnahme
-  („N Min. warten“ oder „Zug freigeben, um eine Kettenreaktion zu vermeiden“).
-- **`v_resumen_tren`** — Endstatus je Zug.
-
-## 🎬 Krisenszenarien (What-if)
-
-`poblar_datos_prueba(escenario)` erzeugt drei realistische Korridore (8 Züge:
-ICE, IC, RE, RB, S und Güterzug):
-
-- **Hessen – Niedersachsen**: Frankfurt → Fulda → Kassel → Göttingen → Hannover.
-- **Nordrhein-Westfalen (Rhein-Ruhr)**: Köln → Düsseldorf → Duisburg → Essen → Dortmund.
-- **Bayern**: München → Ingolstadt → Nürnberg.
-
-| Szenario | Beschreibung |
-|-----------|-------------|
-| `baseline` | Normalbetrieb mit moderaten Verspätungen |
-| `baustelle` | Baustelle / eingleisiger Betrieb zwischen Fulda und Kassel |
-| `oberleitung` | Störung der Oberleitung in Kassel-Wilhelmshöhe |
-| `signal` | Signalstörung in Fulda |
-| `ueberfuellung` | Überlastung in Frankfurt und Hannover |
-| `ice_ueberholt` | Der ICE überholt; RE/RB/Güterzug räumen die Strecke aufgrund der Priorität |
-
-## 📡 Reale Daten (öffentlich, ohne API-Key)
-
-Das Modul `ingest.py` verbindet sich mit offenen Datenquellen in Deutschland:
-
-1. **GTFS-Realtime live** — `https://realtime.gtfs.de/realtime-free.pb`
-   (TripUpdates mit Verspätungen + ServiceAlerts). `importar_gtfs_rt()` lädt die Daten herunter,
-   dekodiert sie mit `gtfs-realtime-bindings` und berechnet die inkrementelle Verspätung je Halt.
-   Das Dashboard verwendet diese Daten im Modus **„GTFS-RT live (DELFI)“** mit
-   automatischer Aktualisierung.
-2. **Statisches GTFS** — `https://download.gtfs.de/germany/free/latest.zip`
-   (ca. 290 MB, kostenlos). `importar_dimensiones_desde_zip()` befüllt `dim_estacion`
-   (Namen) und `dim_tren` (Zugtyp), indem nur `stops/routes/trips` aus dem ZIP gelesen werden.
-   In der Benutzeroberfläche steht dafür eine Schaltfläche zur Verfügung.
-3. **Historische Daten** — `importar_historico_csv()` normalisiert Datensätze im Format
-   „Bahn-Vorhersage“ (`trip_id`, `stop_id`, geplante/tatsächliche Zeiten, Ursache).
-
-> Um das **DB Developer Portal / GTFS-RT mit API-Key** zu verwenden, genügt es, `url=`
-> an `importar_gtfs_rt()` zu übergeben oder `URL_GTFS_RT` in `ingest.py` zu ändern.
-
-## 🚂 Echte Zugnummer (Zugnummer) — DB-API (optional)
-
-Der kostenlose DELFI-Feed veröffentlicht **nur die Linie** (z. B. `ICE 12`), nicht die
-**Zugnummer** (`ICE 573`). Die tatsächliche Zugnummer wird aus dem Element `<tl>`
-(`c` = Kategorie, `n` = Nummer) der **Timetables-API** der Deutschen Bahn ermittelt.
-
-Da die API `plan/{eva}/...` die **EVA-Nummer** des Bahnhofs benötigt und der DELFI-Feed seine
-eigene `stop_id` verwendet (z. B. Frankfurt Hbf = `165223` bei DELFI gegenüber EVA
-`8000105`), wird zunächst über den Endpunkt `station/{nombre}` die Zuordnung
-`stop_id` → EVA ermittelt (im Cache `dim_estacion_eva`). Anschließend wird der Fahrplan je
-Bahnhof und Stunde heruntergeladen (im Cache `dim_plan_parada`) und anhand von
-**Kategorie + geplanter Uhrzeit** abgeglichen. Ein zweiter Durchlauf berücksichtigt private
-Betreiber wie BRB/AVG/WEG/NX, deren Kategorie in der API der Betreibercode ist. Das Ergebnis
-wird in `dim_tren_zug` gespeichert.
-
-`ingest_db.py` implementiert diese Anreicherung. Sie ist **optional**: Wenn keine
-Zugangsdaten vorhanden sind, zeigt das Dashboard wie bisher die Linie (`ICE 12`) an.
-
-**Einmalige Konfiguration:**
-
-1. Registriere dich unter <https://developers.deutschebahn.com/db-api-marketplace/> und erstelle
-   eine Anwendung; abonniere dafür das Produkt **Timetables**.
-2. Kopiere deine **Client ID** und deinen **API Key**.
-3. Erstelle `.streamlit/secrets.toml` (steht in `.gitignore` und wird nicht versioniert):
-
-   ```toml
-   DB_CLIENT_ID = "deine-client-id"
-   DB_API_KEY   = "dein-api-key"
-   ```
-
-   Alternativ können `DB_CLIENT_ID` / `DB_API_KEY` als Umgebungsvariablen gesetzt werden.
-4. Starte das Dashboard neu. Beim Start und anschließend alle 60 s werden die Zugnummern
-   ermittelt. Du kannst das separat testen mit:
-
-   ```bash
-   python ingest_db.py
-   ```
-
-Begrenzung der API: ca. 60 Anfragen/Minute (eine pro Bahnhof und Stunde). Daten unter CC BY 4.0
-(Deutsche Bahn).
-
-> **Hinweis (inkrementeller Cache und Abdeckung):** Die `trip_id` des Live-Feeds ändern sich
-> im Laufe der Zeit. Daher erfolgt die Anreicherung **inkrementell und kumulativ**:
-> `dim_tren_zug` wird **zusammengeführt** (nicht ersetzt), und es werden nur Züge aufgelöst,
-> für die noch keine Nummer vorliegt. Bahnhöfe, die keiner EVA-Nummer zugeordnet werden können,
-> werden als negative Treffer gespeichert (`dim_estacion_eva.eva = "-"`), damit keine erneuten
-> Versuche erfolgen. Die Timetables-API deckt nur **Eisenbahnbahnhöfe** ab: Haltestellen von
-> **Bus/Tram/lokaler S-Bahn** (z. B. „Aachen Bushof“, „Paderborn Gierstor“) haben keine EVA-Nummer
-> und erhalten daher keine Zugnummer (ihre Linie wird angezeigt). In der Praxis lassen sich etwa
-> 70 % der Züge auflösen.
-
-## 📊 Funktionen des Dashboards
-
-- **KPIs**: überwachte Züge, aktive kritische Warnungen, maximale kumulierte Verspätung und
-  **wichtigster Engpass** (Ausbreitungsindex).
-- **Zeit-Weg-Diagramm (Bildfahrplan)**: Jeder Zug ist eine Linie; gestrichelte Linien zeigen
-  den Fahrplan, durchgezogene Linien den tatsächlichen Verlauf. Der Dominoeffekt und
-  Überholvorgänge werden sichtbar.
-- **Engpass (Flaschenhals)**: Diagramm des Ausbreitungsindex je Bahnhof.
-- **Kumulierte Verspätung je Bahnhof / Stadt / Region und Zug** (gruppiertes Balkendiagramm).
-- **Anschlussrisiko (Anschluss)**: Tabelle mit verpassten bzw. gefährdeten Anschlüssen und
-  einer vorgeschlagenen Maßnahme.
-- **Hauptursachen**: aktive Netzstörungen (Ursache aus dem Live-Feed) sowie Ursache je Zug.
-- **Live-Protokoll**: vollständige Tabelle von `v_efecto_domino` mit Filtern.
-
-### UI/UX
-
-- **Automatische Aktualisierung ohne Flackern**: Verwendet `st.fragment(run_every="5s")` statt
-  `time.sleep()` + `st.rerun()`, sodass nur die Panels und nicht die gesamte Benutzeroberfläche
-  aktualisiert werden. Standardmäßig alle 5 s aktiviert.
-- **Live-Datenquelle als Standard**: `GTFS-RT (DELFI)`. Das offizielle **statische GTFS**
-  wird beim Start automatisch geladen (beim ersten Mal heruntergeladen), um echte
-  Bahnhofsnamen und Zugtypen aufzulösen. Es werden nur **bekannte Züge** angezeigt
-  (Züge mit dem Typ `Unbekannt` werden ausgeschlossen).
-- **Globaler Standortfilter (Bundesland → Stadt)** als **sichtbare Filterleiste** im Kopfbereich:
-  zwei stets sichtbare Dropdown-Menüs (`selectbox`). Zuerst wird das **Bundesland** ausgewählt;
-  anschließend werden die **Städte** entsprechend auf dieses Bundesland eingeschränkt. Das gesamte
-  Dashboard (KPIs, Engpass, Balkendiagramme und Anschlüsse) wird auf den ausgewählten Standort
-  begrenzt, z. B. `Hessen` + `Fulda`.
-- **Zugidentifikation**: Jeder Zug wird mit der **echten Zugnummer** beschriftet
-  (`ICE 573`, sofern DB-API-Zugangsdaten vorhanden sind), andernfalls mit der **offiziellen Linie**
-  (`ICE 12`), gefolgt von der Strecke `Start → Ziel`. Dies gilt für das Zeit-Weg-Diagramm,
-  das Diagramm der kumulierten Verspätung, die Protokolltabelle und die Anschlusstabelle (Anschluss).
+```toml
+DB_CLIENT_ID = "deine-client-id"
+DB_API_KEY   = "dein-api-key"
 ```
+
+4. Nach Änderungen an Secrets oder Modulen: **Reboot app** ausführen.
+5. Bei privatem Repository muss die Streamlit-GitHub-App Zugriff haben
+   ([Installation konfigurieren](https://github.com/apps/streamlit-community-cloud)).
+
+Der Worker startet automatisch mit der App. Die Datenbank wird beim ersten Start
+neu aufgebaut; es müssen keine Dateien mitgeliefert werden.
+
+---
+
+## 🧪 Lokale Diagnose
+
+```bash
+# Datenbestand und Kennzahlen prüfen
+python database.py
+
+# Nur die Ingestion testen
+python ingest_api.py
+
+# GTFS-RT-Fallback testen
+python ingest.py
+```
+
+---
+
+## ⚠️ Grenzen & Hinweise
+
+- **Kein vollständiges Netzabbild.** Die DB-API-Abfrage deckt 24 große
+  Knotenbahnhöfe ab; Regionallinien erscheinen vor allem über den GTFS-RT-Fallback.
+- **API-Limit.** Die Timetables API erlaubt etwa **60 Requests pro Minute**.
+  Ein Zyklus kann dieses Limit erreichen; HTTP `429` wird automatisch mit
+  Backoff wiederholt.
+- **Fahrplan ≠ Echtzeit.** `plan/{eva}` liefert nur den Soll-Fahrplan. Reale
+  Zeiten kommen ausschließlich aus `fchg/{eva}`, verknüpft über die `<s id>`.
+- **Ursachen sind begrenzt.** Der kostenlose DELFI-Feed liefert Ursachen meist
+  nur als Freitext auf Netzebene. Die Zuordnung zum einzelnen Zug ist daher
+  nicht immer möglich (`Keine Feed-Information`).
+- **GTFS-RT-Fallback.** Ohne DB-Zugangsdaten werden max. 1.500 Fahrten pro
+  Zyklus verarbeitet; die Zugnummern-Auflösung liegt dort bei etwa 70 %.
+- **Keine amtliche Quelle.** Alle Daten stammen von Dritten und dienen der
+  Analyse und Demonstration, nicht der Betriebssteuerung.
+
+---
+
+## 🛠️ Technologie-Stack
+
+| Schicht | Technologie |
+|---|---|
+| Sprache | Python 3.12+ |
+| Data Warehouse | DuckDB (spaltenorientiert, embedded) |
+| Analytik | SQL mit Fensterfunktionen, Kimball-Sternschema |
+| Ingestion | `requests`, `xml.etree`, `gtfs-realtime-bindings`, `pandas` |
+| Visualisierung | Streamlit, Plotly |
+| Betrieb | Daemon-Threads, materialisierte Marts, Auto-Refresh |
+| Deployment | Streamlit Community Cloud |
+
+---
+
+## 🎨 Design
+
+Das Theme orientiert sich an den **Abfahrtsmonitoren der Deutschen Bahn**:
+
+- tiefes Schwarz als Hintergrund,
+- Amber für Text und Akzente,
+- DB-Rot `#EC0016` für kritische Zustände,
+- Signalgrün für Pünktlichkeit,
+- Monospace-Schrift (`JetBrains Mono`) für den Anzeigetafel-Look.
+
+---
+
+## 📜 Daten & Danksagung
+
+- Fahrplan- und Echtzeitdaten: **Deutsche Bahn AG**, DB API Marketplace
+  (Timetables), Lizenz **CC BY 4.0**.
+- Open-Data-Feed: **DELFI / gtfs.de**.
+- Dieses Projekt steht in **keiner offiziellen Verbindung** zur Deutschen Bahn AG.
+
+---
+
+<div align="center">
+
+**Gute Fahrt. Und möge die Kette nie reißen.** 🚆
+
+[⬆ Nach oben](#-kettenblick)
+
+</div>
