@@ -51,6 +51,16 @@ def main() -> None:
     if not db.RUTA_DB.exists():
         raise SystemExit(f"No existe la base local: {db.RUTA_DB}")
 
+    # La base debe existir antes de conectarse con `md:<nombre>`.
+    nombre = db.NOMBRE_DB_NUBE
+    if not nombre.replace("_", "").isalnum():
+        raise SystemExit(f"Nombre de base MotherDuck no válido: {nombre}")
+    base = duckdb.connect("md:", config={"motherduck_token": token})
+    try:
+        base.execute(f"CREATE DATABASE IF NOT EXISTS {nombre}")
+    finally:
+        base.close()
+
     # El esquema y las vistas se crean en MotherDuck con el mismo código de siempre.
     db.inicializar_db()
     print(f"Esquema creado en {db.modo_db()}")
@@ -66,7 +76,7 @@ def main() -> None:
             for r in con.execute(
                 "SELECT table_name FROM information_schema.tables "
                 "WHERE table_catalog = 'origen_local' AND table_schema = 'main' "
-                "ORDER BY table_name"
+                "AND table_type = 'BASE TABLE' ORDER BY table_name"
             ).fetchall()
         ]
         for tabla in tablas:

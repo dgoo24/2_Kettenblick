@@ -411,8 +411,9 @@ python subir_a_motherduck.py
 # (nur wieder starten, falls du lokal ohne Cloud arbeiten willst)
 ```
 
-Das Skript legt Schema, Views und Marts in MotherDuck an und kopiert alle
-Tabellen inklusive `observacion_historial` (Hash-Deduplikation bleibt erhalten).
+Das Skript legt die Datenbank `kettenblick` (falls noch nicht vorhanden), das
+Schema, die Views und die Marts in MotherDuck an und kopiert alle Basistabellen
+inklusive `observacion_historial` (Hash-Deduplikation bleibt erhalten).
 
 **Wichtig für Community Cloud:** Die App schläft nach ~12 h ohne Besucher.
 Während sie schläft, pausiert auch der Worker; beim nächsten Aufruf wacht sie
