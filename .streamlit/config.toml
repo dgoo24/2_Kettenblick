@@ -1,0 +1,65 @@
+# Tema "Anzeigetafel" (panel de estación alemán) — Streamlit
+# Fondo negro, texto ámbar y acentos rojo DB, como los tableros de salidas.
+
+[theme]
+base = "dark"
+primaryColor = "#EC0016"              # Rojo DB
+backgroundColor = "#0A0A0A"           # Negro tablero
+secondaryBackgroundColor = "#161616"  # Gris muy oscuro (paneles)
+codeBackgroundColor = "#161616"
+textColor = "#FFB000"                 # Ámbar LED
+linkColor = "#FFC300"
+borderColor = "#2B2B2B"
+codeTextColor = "#FFC300"
+showWidgetBorder = true
+showSidebarBorder = true
+baseRadius = "2px"
+buttonRadius = "2px"
+
+# Tipografía tipo panel de salidas (monoespaciada)
+font = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
+headingFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+baseFontSize = 15
+baseFontWeight = 400
+codeFontSize = "14px"
+headingFontSizes = ["30px", "22px", "18px", "16px", "14px", "12px"]
+headingFontWeights = [700, 700, 700, 700, 500, 500]
+linkUnderline = false
+
+# Colores semánticos ferroviarios
+greenColor = "#4ADE80"   # En tiempo
+redColor = "#EC0016"     # Crítico (rojo DB)
+yellowColor = "#FFB000"  # Alerta (ámbar)
+orangeColor = "#FB923C"
+blueColor = "#60A5FA"
+violetColor = "#A78BFA"
+grayColor = "#8A8A8A"
+
+# Paleta de gráficos (ámbar, rojo DB, blanco, verde señal...)
+chartCategoricalColors = [
+    "#FFB000",
+    "#EC0016",
+    "#E5E7EB",
+    "#4ADE80",
+    "#60A5FA",
+    "#A78BFA",
+    "#FB923C",
+    "#8A8A8A",
+]
+
+chartSequentialColors = [
+    "#3A0A0C",
+    "#5A0F12",
+    "#7A1418",
+    "#9A181E",
+    "#BA1D24",
+    "#D98600",
+    "#E6A200",
+    "#F2BE00",
+    "#FBD34D",
+    "#FFE79A",
+]
+
+dataframeBorderColor = "#2B2B2B"
+dataframeHeaderBackgroundColor = "#161616"
