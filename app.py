@@ -58,6 +58,7 @@ if FALLBACK_ACTIVO and db.leer_efecto_domino().empty:
 # Cabecera (estable, fuera del fragmento)
 # --------------------------------------------------------------------------- #
 st.title("🚆 Kritische Verspätungen erkennen (Dominoeffekt)")
+st.caption(f"Datenquelle: {db.modo_db()}")
 
 
 def _adjuntar_etiquetas(df: pd.DataFrame, etq: pd.DataFrame) -> pd.DataFrame:

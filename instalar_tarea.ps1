@@ -23,10 +23,11 @@ $accion = New-ScheduledTaskAction `
 
 $disparador = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 
+# El propio servicio_kettenblick.py ya relanza Streamlit si muere, así que no
+# hace falta el reinicio del Programador (además, deja la tarea en "Queued"
+# cuando el proceso se mata a mano).
 $ajustes = New-ScheduledTaskSettingsSet `
     -MultipleInstances IgnoreNew `
-    -RestartCount 999 `
-    -RestartInterval (New-TimeSpan -Minutes 1) `
     -ExecutionTimeLimit ([TimeSpan]::Zero) `
     -StartWhenAvailable
 

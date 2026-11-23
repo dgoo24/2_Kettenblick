@@ -1,5 +1,5 @@
 streamlit>=1.57
-duckdb>=0.9
+duckdb>=1.1
 pandas>=2.0
 plotly>=5.0
 requests>=2.28

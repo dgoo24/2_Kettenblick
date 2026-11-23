@@ -15,6 +15,7 @@ Modelado dimensional (Kimball):
 
 from __future__ import annotations
 
+import os
 import random
 import threading
 import time
@@ -24,9 +25,38 @@ from pathlib import Path
 import duckdb
 
 # --------------------------------------------------------------------------- #
-# Rutas
+# Rutas / destino de datos
 # --------------------------------------------------------------------------- #
 RUTA_DB = Path(__file__).resolve().parent / "trenes_mvp.duckdb"
+NOMBRE_DB_NUBE = os.environ.get("MOTHERDUCK_DATABASE", "kettenblick")
+
+
+def _token_motherduck() -> str | None:
+    """Token de MotherDuck, en Streamlit Secrets o variable de entorno.
+
+    Si no hay token, la app sigue funcionando con el archivo local
+    `trenes_mvp.duckdb` (modo desarrollo). En Streamlit Cloud el token se pone
+    en App settings → Secrets como ``MOTHERDUCK_TOKEN = "..."`` y entonces
+    toda la lectura/escritura ocurre en la nube, que sí es persistente.
+    """
+    token = os.environ.get("MOTHERDUCK_TOKEN") or os.environ.get("motherduck_token")
+    if not token:
+        try:
+            import streamlit as st
+
+            token = st.secrets.get("MOTHERDUCK_TOKEN") or st.secrets.get(
+                "motherduck_token"
+            )
+        except Exception:  # noqa: BLE001 - también se usa fuera de Streamlit
+            token = None
+    return str(token).strip() if token else None
+
+
+def modo_db() -> str:
+    """Etiqueta legible del destino activo (para la UI y los logs)."""
+    if _token_motherduck():
+        return f"MotherDuck · {NOMBRE_DB_NUBE}"
+    return f"Local · {RUTA_DB.name}"
 
 
 # --------------------------------------------------------------------------- #
@@ -172,7 +202,16 @@ def _db() -> duckdb.DuckDBPyConnection:
     if _DB_CON is None:
         with _DB_CON_LOCK:
             if _DB_CON is None:
-                _DB_CON = duckdb.connect(str(RUTA_DB))
+                token = _token_motherduck()
+                if token:
+                    # Base persistente en la nube: la usan tanto el worker como
+                    # la UI dentro de Streamlit Cloud. Misma SQL, otro destino.
+                    _DB_CON = duckdb.connect(
+                        f"md:{NOMBRE_DB_NUBE}",
+                        config={"motherduck_token": token},
+                    )
+                else:
+                    _DB_CON = duckdb.connect(str(RUTA_DB))
                 # Workaround de un bug interno de DuckDB (visto en Python 3.14):
                 # TopNWindowElimination puede fallar con "Failed to cast
                 # expression to type" al materializar vistas con ROW_NUMBER().
@@ -1333,7 +1372,7 @@ def leer_dim_tren_zug():
 if __name__ == "__main__":
     inicializar_db()
     poblar_datos_prueba("baseline")
-    print(f"Base de datos: {RUTA_DB}")
+    print(f"Base de datos: {modo_db()}")
     print("\n== v_efecto_domino (head) ==")
     print(leer_efecto_domino().head(8).to_string(index=False))
     print("\n== Flaschenhals por REGIÓN ==")

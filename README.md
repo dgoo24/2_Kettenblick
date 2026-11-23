@@ -373,8 +373,52 @@ DB_API_KEY   = "dein-api-key"
 5. Bei privatem Repository muss die Streamlit-GitHub-App Zugriff haben
    ([Installation konfigurieren](https://github.com/apps/streamlit-community-cloud)).
 
-Der Worker startet automatisch mit der App. Die Datenbank wird beim ersten Start
-neu aufgebaut; es müssen keine Dateien mitgeliefert werden.
+Der Worker startet automatisch mit der App. Ohne externe Datenbank wird die
+Datenbank beim ersten Start neu aufgebaut – die lokale Datei ist auf Community
+Cloud **nicht persistent** und verschwindet bei jedem Reboot.
+
+### Persistente Daten mit MotherDuck (empfohlen)
+
+Damit der Verlauf auch in der Cloud erhalten bleibt, genügt ein Token. Die
+SQL, Views und Marts bleiben unverändert; `database.py` verbindet automatisch
+mit `md:kettenblick`, sobald `MOTHERDUCK_TOKEN` vorhanden ist.
+
+1. Auf [motherduck.com](https://motherduck.com/) einloggen und den **Lite-Plan**
+   wählen (0 $, keine Kreditkarte, 10 GB Speicher).
+2. In der MotherDuck-UI: **Organization → Settings → Integrations → Access
+   Tokens → Create token** (Typ *Read/Write*).
+3. Das Token in Streamlit Cloud unter **App settings → Secrets** ergänzen:
+
+```toml
+DB_CLIENT_ID        = "deine-client-id"
+DB_API_KEY          = "dein-api-key"
+MOTHERDUCK_TOKEN    = "mdt_..."
+MOTHERDUCK_DATABASE = "kettenblick"   # optional, das ist schon der Standard
+```
+
+4. **Reboot app.** In der Kopfzeile der App steht jetzt
+   `Datenquelle: MotherDuck · kettenblick`.
+
+**Bestehenden Verlauf einmalig hochladen** (auf deinem PC, wo die echte
+`trenes_mvp.duckdb` liegt):
+
+```powershell
+# Token lokal in .streamlit/secrets.toml eintragen (steht in .gitignore)
+Stop-ScheduledTask -TaskName 'Kettenblick - Capturador continuo'
+python subir_a_motherduck.py
+# Danach kann der lokale Dienst dauerhaft gestoppt bleiben:
+# Stop-ScheduledTask -TaskName 'Kettenblick - Capturador continuo'
+# (nur wieder starten, falls du lokal ohne Cloud arbeiten willst)
+```
+
+Das Skript legt Schema, Views und Marts in MotherDuck an und kopiert alle
+Tabellen inklusive `observacion_historial` (Hash-Deduplikation bleibt erhalten).
+
+**Wichtig für Community Cloud:** Die App schläft nach ~12 h ohne Besucher.
+Während sie schläft, pausiert auch der Worker; beim nächsten Aufruf wacht sie
+auf und die Daten sind dank MotherDuck noch da. Für lückenlose 5-Minuten-
+Snapshots muss die App regelmäßig aufgerufen werden (z. B. alle paar Stunden
+die URL öffnen).
 
 ---
 
@@ -417,7 +461,7 @@ python ingest.py
 | Schicht | Technologie |
 |---|---|
 | Sprache | Python 3.12+ |
-| Data Warehouse | DuckDB (spaltenorientiert, embedded) |
+| Data Warehouse | DuckDB (lokal) / MotherDuck (persistent in der Cloud) |
 | Analytik | SQL mit Fensterfunktionen, Kimball-Sternschema |
 | Ingestion | `requests`, `xml.etree`, `gtfs-realtime-bindings`, `pandas` |
 | Visualisierung | Streamlit, Plotly |
@@ -440,10 +484,12 @@ Das Theme orientiert sich an den **Abfahrtsmonitoren der Deutschen Bahn**:
 
 ## 🔄 Dauerbetrieb (lückenlose Aufzeichnung)
 
-Der Ingest-Worker lebt **im selben Prozess wie Streamlit**: DuckDB erlaubt nur
-einen Prozess gleichzeitig auf die Datei (auch nur lesend). Deshalb darf man
-keinen zweiten Capture-Prozess starten – der Dienst hält stattdessen genau
-diesen einen Prozess am Leben.
+Der Ingest-Worker lebt **im selben Prozess wie Streamlit**. Im reinen
+Datei-Modus erlaubt DuckDB nur einen Prozess gleichzeitig auf `trenes_mvp.duckdb`
+(auch nur lesend); deshalb hält der lokale Dienst genau diesen einen Prozess am
+Leben. Mit MotherDuck entfällt diese Einschränkung: Cloud und PC können auf
+dieselbe persistente Datenbank schreiben. Sobald die Cloud läuft, kann der
+lokale Dienst gestoppt werden.
 
 Installiert ist die geplante Aufgabe **`Kettenblick - Capturador continuo`**:
 
@@ -483,9 +529,9 @@ Standard 60 s), `INTERVALO_HISTORIAL_S` (Snapshots, Standard 300 s) und
 `INTERVALO_ENRIQUECER_S` (Zugnummern, Standard 60 s). Größere Werte sparen
 Ressourcen, ergeben aber gröbere Verlaufsdaten.
 
-**Wichtig:** Solange der Dienst läuft, kann kein anderes Programm
-(`AppTest`, DuckDB-CLI, …) dieselbe DB-Datei öffnen. Dafür erst den Dienst
-stoppen.
+**Wichtig (nur im Datei-Modus ohne MotherDuck):** Solange der Dienst läuft,
+kann kein anderes Programm (`AppTest`, DuckDB-CLI, …) dieselbe DB-Datei öffnen.
+Dafür erst den Dienst stoppen.
 
 ---
 
