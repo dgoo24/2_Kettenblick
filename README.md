@@ -392,7 +392,7 @@ mit `md:kettenblick`, sobald `MOTHERDUCK_TOKEN` vorhanden ist.
 ```toml
 DB_CLIENT_ID        = "deine-client-id"
 DB_API_KEY          = "dein-api-key"
-MOTHERDUCK_TOKEN    = "mdt_..."
+MOTHERDUCK_TOKEN    = "eyJ...token JWT completo, en una sola línea..."
 MOTHERDUCK_DATABASE = "kettenblick"   # optional, das ist schon der Standard
 ```
 
